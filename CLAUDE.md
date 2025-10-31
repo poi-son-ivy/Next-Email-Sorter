@@ -44,11 +44,12 @@ npm run lint
   - `sign-in.tsx` - Google sign-in button
   - `sign-out.tsx` - Sign-out button
   - `user-info.tsx` - Display authenticated user info
+- `/lib` - Utility functions and configurations
+  - `auth.ts` - NextAuth configuration with Google provider
 - `/types` - TypeScript type definitions
   - `next-auth.d.ts` - NextAuth session/JWT type extensions
-- `auth.ts` - NextAuth configuration with Google provider
 - `next.config.ts` - Next.js configuration
-- `tailwind.config.ts` - Tailwind CSS configuration
+- `postcss.config.mjs` - PostCSS configuration for Tailwind CSS v4
 - `tsconfig.json` - TypeScript configuration
 
 ### Authentication Flow

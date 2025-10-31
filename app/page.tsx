@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth";
 import { SignIn } from "@/components/sign-in";
 import { UserInfo } from "@/components/user-info";
 

@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth";
 import { SignOut } from "./sign-out";
 
 export async function UserInfo() {
