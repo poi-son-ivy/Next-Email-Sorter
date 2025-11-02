@@ -1,13 +1,8 @@
-import { signOut } from "@/lib/auth";
+import { signOutAction } from "@/app/actions/auth";
 
 export function SignOut() {
   return (
-    <form
-      action={async () => {
-        "use server";
-        await signOut();
-      }}
-    >
+    <form action={signOutAction}>
       <button
         type="submit"
         className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"

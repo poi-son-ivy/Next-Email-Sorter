@@ -30,8 +30,10 @@ npm run lint
 ### Tech Stack
 - **Framework**: Next.js 15 (App Router)
 - **Language**: TypeScript
-- **Styling**: Tailwind CSS
+- **Styling**: Tailwind CSS v4
 - **Authentication**: NextAuth.js v5 (beta)
+- **Database**: PostgreSQL (Neon serverless)
+- **ORM**: Prisma with Neon adapter
 - **Email API**: Google Gmail API via googleapis package
 
 ### Project Structure
@@ -46,10 +48,16 @@ npm run lint
   - `user-info.tsx` - Display authenticated user info
 - `/lib` - Utility functions and configurations
   - `auth.ts` - NextAuth configuration with Google provider
+  - `prisma.ts` - Prisma client singleton with Neon adapter
+  - `/generated/prisma` - Generated Prisma client
+- `/prisma` - Database schema and migrations
+  - `schema.prisma` - Database schema with User, Account, Session, Email models
+  - `/migrations` - Database migration history
 - `/types` - TypeScript type definitions
   - `next-auth.d.ts` - NextAuth session/JWT type extensions
 - `next.config.ts` - Next.js configuration
 - `postcss.config.mjs` - PostCSS configuration for Tailwind CSS v4
+- `prisma.config.ts` - Prisma configuration
 - `tsconfig.json` - TypeScript configuration
 
 ### Authentication Flow
@@ -83,10 +91,48 @@ Required environment variables:
 - `GOOGLE_CLIENT_ID` - From Google Cloud Console
 - `GOOGLE_CLIENT_SECRET` - From Google Cloud Console
 - `NEXTAUTH_URL` - Application URL (default: http://localhost:3000)
+- `DATABASE_URL` - Neon PostgreSQL pooled connection string
+- `DIRECT_DATABASE_URL` - Neon PostgreSQL direct connection string (for migrations)
+
+## Database Schema
+
+The application uses Prisma with the following models:
+
+- **User** - User accounts with email, name, and OAuth info
+- **Account** - OAuth provider accounts (stores Google OAuth tokens)
+- **Session** - User sessions for NextAuth
+- **VerificationToken** - Email verification tokens
+- **Email** - Cached Gmail messages with metadata (gmailId, subject, from, to, labels, etc.)
+
+Key relationships:
+- Users have many Accounts, Sessions, and Emails
+- Emails are linked to Users for quick retrieval
+- Access tokens stored in Account model for Gmail API calls
+
+### Database Commands
+
+```bash
+# Generate Prisma client after schema changes
+npx prisma generate
+
+# Create a new migration
+npx prisma migrate dev --name migration_name
+
+# Apply migrations in production
+npx prisma migrate deploy
+
+# Open Prisma Studio to view/edit data
+npx prisma studio
+
+# Reset database (WARNING: deletes all data)
+npx prisma migrate reset
+```
 
 ## Development Notes
 
 - The project uses Next.js App Router with Server Components by default
 - Auth components use Server Actions for sign-in/sign-out
 - Session data includes Gmail access tokens for API calls
+- Prisma client is configured with Neon adapter for serverless deployment
+- Database connection uses WebSocket for local development
 - TypeScript strict mode is enabled

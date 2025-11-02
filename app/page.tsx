@@ -1,9 +1,14 @@
 import { auth } from "@/lib/auth";
 import { SignIn } from "@/components/sign-in";
-import { UserInfo } from "@/components/user-info";
+import { redirect } from "next/navigation";
 
 export default async function Home() {
   const session = await auth();
+
+  // Redirect to dashboard if already logged in
+  if (session) {
+    redirect("/dashboard");
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -15,13 +20,9 @@ export default async function Home() {
           </p>
         </div>
 
-        {session ? (
-          <UserInfo />
-        ) : (
-          <div className="flex justify-center">
-            <SignIn />
-          </div>
-        )}
+        <div className="flex justify-center">
+          <SignIn />
+        </div>
       </div>
     </div>
   );
