@@ -30,7 +30,7 @@ export function CategoryCard({ category, isSelected, onClick }: CategoryCardProp
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
             {category.name}
           </h3>
-          <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2">
+          <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
             {category.description}
           </p>
         </div>
