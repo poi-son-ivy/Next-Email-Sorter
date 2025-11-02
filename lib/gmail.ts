@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import { prisma } from "./prisma";
 import { pusher } from "./pusher";
 import { categorizeEmail, generateEmailSummary } from "./ai";
+import { findUnsubscribeLinkInHeader, findUnsubscribeLinkInBody } from "./unsubscribe";
 
 export interface GmailMessage {
   id: string;
@@ -10,8 +11,74 @@ export interface GmailMessage {
   snippet: string;
   payload: {
     headers: Array<{ name: string; value: string }>;
+    body?: { data?: string };
+    parts?: Array<{
+      mimeType: string;
+      body?: { data?: string };
+      parts?: Array<{
+        mimeType: string;
+        body?: { data?: string };
+      }>;
+    }>;
   };
   internalDate: string;
+}
+
+/**
+ * Extract email body from Gmail message
+ * Handles both plain text and HTML emails
+ */
+function extractEmailBody(message: GmailMessage): string {
+  if (!message.payload) {
+    return "";
+  }
+
+  // Check if body is directly in payload
+  if (message.payload.body?.data) {
+    return Buffer.from(message.payload.body.data, "base64").toString("utf-8");
+  }
+
+  // Check parts for multipart messages
+  if (message.payload.parts) {
+    // Try to find HTML part first
+    const htmlPart = message.payload.parts.find(
+      (part) => part.mimeType === "text/html"
+    );
+
+    if (htmlPart?.body?.data) {
+      return Buffer.from(htmlPart.body.data, "base64").toString("utf-8");
+    }
+
+    // Fall back to plain text
+    const textPart = message.payload.parts.find(
+      (part) => part.mimeType === "text/plain"
+    );
+
+    if (textPart?.body?.data) {
+      return Buffer.from(textPart.body.data, "base64").toString("utf-8");
+    }
+
+    // Check nested parts
+    for (const part of message.payload.parts) {
+      if (part.parts) {
+        const nestedHtml = part.parts.find(
+          (p) => p.mimeType === "text/html"
+        );
+        if (nestedHtml?.body?.data) {
+          return Buffer.from(nestedHtml.body.data, "base64").toString("utf-8");
+        }
+
+        const nestedText = part.parts.find(
+          (p) => p.mimeType === "text/plain"
+        );
+        if (nestedText?.body?.data) {
+          return Buffer.from(nestedText.body.data, "base64").toString("utf-8");
+        }
+      }
+    }
+  }
+
+  return message.snippet || "";
 }
 
 /**
@@ -84,14 +151,34 @@ export async function storeEmails(
     const to = headers.find((h) => h.name === "To")?.value || "";
     const date = headers.find((h) => h.name === "Date")?.value || "";
 
+    // Extract unsubscribe URL from header first (most reliable)
+    const listUnsubscribe = headers.find((h) => h.name === "List-Unsubscribe")?.value || "";
+    let unsubscribeUrl: string | null = findUnsubscribeLinkInHeader(listUnsubscribe);
+
+    // If no header link found, try parsing the email body
+    if (!unsubscribeUrl) {
+      const emailBody = extractEmailBody(message);
+      if (emailBody) {
+        unsubscribeUrl = findUnsubscribeLinkInBody(emailBody);
+        if (unsubscribeUrl) {
+          console.log(`[Unsubscribe] Found link in body for "${subject}": ${unsubscribeUrl}`);
+        }
+      }
+    } else {
+      console.log(`[Unsubscribe] Found link in header for "${subject}": ${unsubscribeUrl}`);
+    }
+
     // Check if email already exists
     const existing = await prisma.email.findUnique({
       where: { gmailId: message.id },
     });
 
     if (existing) {
+      console.log(`[Email] Skipping existing email: "${subject}"`);
       continue; // Skip if already stored
     }
+
+    console.log(`[Email] Processing new email: "${subject}"`);
 
     // Get user's categories for AI categorization
     const categories = await prisma.category.findMany({
@@ -166,6 +253,7 @@ export async function storeEmails(
         labelIds: message.labelIds || [],
         receivedAt: new Date(parseInt(message.internalDate)),
         categoryId,
+        unsubscribeUrl,
       },
     });
 

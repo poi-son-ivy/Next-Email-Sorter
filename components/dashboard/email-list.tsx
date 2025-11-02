@@ -16,6 +16,8 @@ interface EmailListProps {
 export function EmailList({ initialEmails, userId, selectedCategoryId, onNewEmail }: EmailListProps) {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleEmailClick = (email: Email) => {
     setSelectedEmail(email);
@@ -25,6 +27,73 @@ export function EmailList({ initialEmails, userId, selectedCategoryId, onNewEmai
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setTimeout(() => setSelectedEmail(null), 300); // Clear after animation
+  };
+
+  const handleToggleSelect = (emailId: string) => {
+    setSelectedEmailIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(emailId)) {
+        newSet.delete(emailId);
+      } else {
+        newSet.add(emailId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedEmailIds.size === initialEmails.length) {
+      setSelectedEmailIds(new Set());
+    } else {
+      setSelectedEmailIds(new Set(initialEmails.map((e) => e.id)));
+    }
+  };
+
+  const handleUnsubscribeSelected = () => {
+    if (selectedEmailIds.size === 0) return;
+
+    // Show unsubscribe URLs for each selected email
+    const selectedEmails = initialEmails.filter((email) => selectedEmailIds.has(email.id));
+
+    selectedEmails.forEach((email) => {
+      const url = email.unsubscribeUrl || "none found";
+      alert(`Email: ${email.subject}\nFrom: ${email.from}\n\nUnsubscribe URL: ${url}`);
+    });
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedEmailIds.size === 0) return;
+
+    if (!confirm(`Delete ${selectedEmailIds.size} email(s)? This will remove them from both the database and Gmail.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch("/api/emails/bulk-delete", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          emailIds: Array.from(selectedEmailIds),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to delete emails");
+      }
+
+      // Clear selection and reload
+      setSelectedEmailIds(new Set());
+      window.location.reload();
+    } catch (error: any) {
+      console.error("Error deleting emails:", error);
+      alert(error.message || "Failed to delete emails");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   useEffect(() => {
@@ -106,31 +175,91 @@ export function EmailList({ initialEmails, userId, selectedCategoryId, onNewEmai
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               {initialEmails.length} {initialEmails.length === 1 ? "email" : "emails"}
+              {selectedEmailIds.size > 0 && ` (${selectedEmailIds.size} selected)`}
             </p>
           </div>
 
-          {/* Refresh Button */}
-          <button
-            onClick={() => window.location.reload()}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            title="Refresh"
-          >
-            <svg
-              className="w-5 h-5 text-gray-600 dark:text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            {initialEmails.length > 0 && (
+              <button
+                onClick={handleSelectAll}
+                className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                title={selectedEmailIds.size === initialEmails.length ? "Deselect all" : "Select all"}
+              >
+                {selectedEmailIds.size === initialEmails.length ? "Deselect all" : "Select all"}
+              </button>
+            )}
+            <button
+              onClick={() => window.location.reload()}
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              title="Refresh"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-          </button>
+              <svg
+                className="w-5 h-5 text-gray-600 dark:text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Bulk Action Bar */}
+      {selectedEmailIds.size > 0 && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800 px-6 py-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-blue-900 dark:text-blue-100">
+              {selectedEmailIds.size} email{selectedEmailIds.size !== 1 ? "s" : ""} selected
+            </p>
+            <div className="flex items-center gap-2">
+              {/* Unsubscribe Button */}
+              <button
+                onClick={handleUnsubscribeSelected}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                Unsubscribe
+              </button>
+
+              {/* Delete Button */}
+              <button
+                onClick={handleDeleteSelected}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Email List */}
       <div className="flex-1 overflow-y-auto">
@@ -160,7 +289,13 @@ export function EmailList({ initialEmails, userId, selectedCategoryId, onNewEmai
           </div>
         ) : (
           initialEmails.map((email) => (
-            <EmailCard key={email.id} email={email} onClick={() => handleEmailClick(email)} />
+            <EmailCard
+              key={email.id}
+              email={email}
+              onClick={() => handleEmailClick(email)}
+              isSelected={selectedEmailIds.has(email.id)}
+              onToggleSelect={() => handleToggleSelect(email.id)}
+            />
           ))
         )}
       </div>

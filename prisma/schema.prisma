@@ -74,18 +74,19 @@ model VerificationToken {
 
 // Email management models
 model Email {
-  id          String   @id @default(cuid())
-  userId      String
-  gmailId     String   @unique
-  threadId    String
-  subject     String?
-  from        String
-  to          String[]
-  snippet     String?
-  summary     String?  @db.Text // AI-generated summary
-  labelIds    String[]
-  receivedAt  DateTime
-  categoryId  String?
+  id             String   @id @default(cuid())
+  userId         String
+  gmailId        String   @unique
+  threadId       String
+  subject        String?
+  from           String
+  to             String[]
+  snippet        String?
+  summary        String?  @db.Text // AI-generated summary
+  labelIds       String[]
+  receivedAt     DateTime
+  categoryId     String?
+  unsubscribeUrl String?  @db.Text // List-Unsubscribe header URL
 
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)

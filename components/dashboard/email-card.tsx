@@ -5,9 +5,15 @@ import { Email } from "@/lib/generated/prisma";
 interface EmailCardProps {
   email: Email;
   onClick: () => void;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-export function EmailCard({ email, onClick }: EmailCardProps) {
+export function EmailCard({ email, onClick, isSelected, onToggleSelect }: EmailCardProps) {
+  const handleCheckboxClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening modal
+    onToggleSelect?.();
+  };
   const formatDate = (date: Date) => {
     const now = new Date();
     const diff = now.getTime() - new Date(date).getTime();
@@ -39,9 +45,23 @@ export function EmailCard({ email, onClick }: EmailCardProps) {
   return (
     <div
       onClick={onClick}
-      className="group bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition-colors"
+      className={`group bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition-colors ${
+        isSelected ? "bg-blue-50 dark:bg-blue-900/20" : ""
+      }`}
     >
       <div className="flex items-start gap-3">
+        {/* Checkbox */}
+        {onToggleSelect && (
+          <div className="flex-shrink-0 pt-1" onClick={handleCheckboxClick}>
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => {}}
+              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+            />
+          </div>
+        )}
+
         {/* Avatar */}
         <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
           {email.from.charAt(0).toUpperCase()}
