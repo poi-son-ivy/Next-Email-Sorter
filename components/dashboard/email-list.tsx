@@ -83,7 +83,7 @@ export function EmailList({ initialEmails, userId, selectedCategoryId, onNewEmai
       setSelectedEmailIds(new Set());
 
       // Show success message
-      alert(`Successfully queued ${result.jobs.length} unsubscribe job(s). You'll be notified when complete.`);
+      alert(`Successfully queued ${result.jobs.length} unsubscribe job(s).`);
     } catch (error: any) {
       console.error("Error enqueueing unsubscribe jobs:", error);
       alert(error.message || "Failed to start unsubscribe process");
