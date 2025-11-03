@@ -152,6 +152,41 @@ export async function storeEmails(
     const to = headers.find((h) => h.name === "To")?.value || "";
     const date = headers.find((h) => h.name === "Date")?.value || "";
 
+    // Check if email already exists FIRST (before expensive operations)
+    const existing = await prisma.email.findUnique({
+      where: { gmailId: message.id },
+    });
+
+    if (existing) {
+      console.log(`[Email] Email already exists: "${subject}"`);
+
+      // Still try to extract unsubscribe URL if the existing email doesn't have one
+      if (!existing.unsubscribeUrl) {
+        const listUnsubscribe = headers.find((h) => h.name === "List-Unsubscribe")?.value || "";
+        let unsubscribeUrl: string | null = findUnsubscribeLinkInHeader(listUnsubscribe);
+
+        // If no header link found, try parsing the email body
+        if (!unsubscribeUrl) {
+          const emailBody = extractEmailBody(message);
+          if (emailBody) {
+            unsubscribeUrl = findUnsubscribeLinkInBody(emailBody);
+          }
+        }
+
+        if (unsubscribeUrl) {
+          console.log(`[Email] Updating existing email with unsubscribeUrl: ${unsubscribeUrl}`);
+          await prisma.email.update({
+            where: { id: existing.id },
+            data: { unsubscribeUrl },
+          });
+        }
+      }
+
+      continue;
+    }
+
+    console.log(`[Email] Processing new email: "${subject}"`);
+
     // Extract unsubscribe URL from header first (most reliable)
     const listUnsubscribe = headers.find((h) => h.name === "List-Unsubscribe")?.value || "";
     let unsubscribeUrl: string | null = findUnsubscribeLinkInHeader(listUnsubscribe);
@@ -174,18 +209,6 @@ export async function storeEmails(
     } else {
       console.log(`[Unsubscribe] ✓ Found link in header for "${subject}": ${unsubscribeUrl}`);
     }
-
-    // Check if email already exists
-    const existing = await prisma.email.findUnique({
-      where: { gmailId: message.id },
-    });
-
-    if (existing) {
-      console.log(`[Email] Skipping existing email: "${subject}"`);
-      continue; // Skip if already stored
-    }
-
-    console.log(`[Email] Processing new email: "${subject}"`);
 
     // Get user's categories for AI categorization
     const categories = await prisma.category.findMany({
@@ -246,31 +269,61 @@ export async function storeEmails(
       }
     }
 
-    // Store new email with category and summary
-    const email = await prisma.email.create({
-      data: {
-        userId,
-        gmailId: message.id,
-        threadId: message.threadId,
-        subject,
-        from,
-        to: [to],
-        snippet: message.snippet,
-        summary,
-        labelIds: message.labelIds || [],
-        receivedAt: new Date(parseInt(message.internalDate)),
-        categoryId,
-        unsubscribeUrl,
-      },
-    });
+    // Try to store new email - handle race condition
+    try {
+      const email = await prisma.email.create({
+        data: {
+          userId,
+          gmailId: message.id,
+          threadId: message.threadId,
+          subject,
+          from,
+          to: [to],
+          snippet: message.snippet,
+          summary,
+          labelIds: message.labelIds || [],
+          receivedAt: new Date(parseInt(message.internalDate)),
+          categoryId,
+          unsubscribeUrl,
+        },
+      });
 
-    storedEmails.push(email);
+      storedEmails.push(email);
 
-    // Trigger Pusher event for real-time update
-    await pusher.trigger(`user-${userId}`, "new-email", {
-      email,
-      accountId,
-    });
+      // Trigger Pusher event for real-time update
+      await pusher.trigger(`user-${userId}`, "new-email", {
+        email,
+        accountId,
+      });
+    } catch (error: any) {
+      // Handle race condition - email already exists
+      if (error.code === 'P2002') {
+        console.log(`[Email] Race condition: Email was created by another process: "${subject}"`);
+
+        // Try to update with unsubscribe URL if we have one
+        if (unsubscribeUrl) {
+          try {
+            const existingEmail = await prisma.email.findUnique({
+              where: { gmailId: message.id },
+            });
+
+            if (existingEmail && !existingEmail.unsubscribeUrl) {
+              console.log(`[Email] Updating with unsubscribeUrl after race condition: ${unsubscribeUrl}`);
+              await prisma.email.update({
+                where: { id: existingEmail.id },
+                data: { unsubscribeUrl },
+              });
+            }
+          } catch (updateError) {
+            console.error(`[Email] Failed to update unsubscribeUrl after race condition:`, updateError);
+          }
+        }
+
+        continue;
+      }
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   return storedEmails;

@@ -38,7 +38,7 @@ export async function generateAICompletion(
 ): Promise<AIResponse> {
   const temperature = options?.temperature ?? 0.7;
   const maxTokens = options?.maxTokens ?? 1024;
-  const anthropicModel = options?.model?.anthropic ?? process.env.ANTHROPIC_MODEL ?? "claude-3-5-sonnet-20241022";
+  const anthropicModel = options?.model?.anthropic ?? process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5-20250929";
   const openaiModel = options?.model?.openai ?? process.env.OPENAI_MODEL ?? "gpt-4o-mini";
 
   // Try Anthropic first

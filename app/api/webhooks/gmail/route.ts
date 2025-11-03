@@ -1,20 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import {
-  fetchNewGmailEmails,
-  processAndStoreNewEmails,
-} from "@/lib/gmail-realtime";
+import { fetchGmailEmails, storeEmails } from "@/lib/gmail";
+
+/**
+ * Process webhook asynchronously
+ */
+async function processWebhookAsync(userId: string, accountId: string) {
+  console.log(`[Webhook Async] Starting processing for account ${accountId}`);
+
+  const messages = await fetchGmailEmails(accountId, 5);
+
+  if (messages.length === 0) {
+    console.log("[Webhook Async] No messages found");
+    return;
+  }
+
+  const storedEmails = await storeEmails(userId, accountId, messages);
+  console.log(`[Webhook Async] Successfully processed ${storedEmails.length} new emails`);
+}
 
 /**
  * Gmail Push Notification Webhook
  *
  * This endpoint receives notifications from Google Pub/Sub when new emails arrive.
- * It fetches only the NEW emails (using historyId) and archives them after processing.
+ * Returns 200 immediately and processes asynchronously to prevent retries.
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    // Clone the request to allow reading the body multiple times if needed
+    const bodyText = await request.text();
 
+    // Handle empty body (happens with duplicate webhook calls)
+    if (!bodyText || bodyText.trim() === '') {
+      console.log("[Webhook] Received empty body, skipping");
+      return NextResponse.json({ success: true });
+    }
+
+    const body = JSON.parse(bodyText);
     console.log("[Webhook] Received Gmail notification:", JSON.stringify(body, null, 2));
 
     // Pub/Sub sends notifications in this format:
@@ -58,27 +80,14 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Webhook] Processing notifications for account ${account.id}`);
 
-    // Fetch only NEW emails since last historyId
-    const newMessages = await fetchNewGmailEmails(account.id);
-
-    if (newMessages.length === 0) {
-      console.log("[Webhook] No new messages to process");
-      return NextResponse.json({ success: true, processed: 0 });
-    }
-
-    // Store emails and archive them in Gmail
-    const storedEmails = await processAndStoreNewEmails(
-      account.userId,
-      account.id,
-      newMessages
-    );
-
-    console.log(`[Webhook] Successfully processed ${storedEmails.length} new emails`);
-
-    return NextResponse.json({
-      success: true,
-      processed: storedEmails.length,
+    // Process the webhook asynchronously (don't await)
+    // This allows us to return 200 immediately to prevent Pub/Sub retries
+    processWebhookAsync(account.userId, account.id).catch((error) => {
+      console.error("[Webhook] Error in async processing:", error);
     });
+
+    // Return 200 immediately to acknowledge receipt
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[Webhook] Error processing notification:", error);
 

@@ -150,12 +150,31 @@ export class UnsubscribeQueue {
 
       // Update job based on result
       if (result.status === "success") {
+        // Store result with screenshots and AI reasoning if available
+        const jobResult: any = {
+          status: result.status,
+          method: result.method,
+          message: result.message,
+          url: result.url,
+        };
+
+        // Add Playwright-specific data if present
+        if (result.screenshotBase64) {
+          jobResult.screenshotBase64 = result.screenshotBase64;
+        }
+        if (result.steps) {
+          jobResult.steps = result.steps;
+        }
+        if (result.aiReasoning) {
+          jobResult.aiReasoning = result.aiReasoning;
+        }
+
         await prisma.unsubscribeJob.update({
           where: { id: jobId },
           data: {
             status: JobStatus.COMPLETED,
             completedAt: new Date(),
-            result: result as any,
+            result: jobResult,
           },
         });
 
@@ -170,12 +189,30 @@ export class UnsubscribeQueue {
         // Notify user via Pusher
         await this.notifyUser(job.userId, jobId, "success", result.message);
       } else if (result.status === "needs_confirmation") {
+        // Store result with screenshots and AI reasoning if available
+        const jobResult: any = {
+          status: result.status,
+          method: result.method,
+          message: result.message,
+          url: result.url,
+        };
+
+        if (result.screenshotBase64) {
+          jobResult.screenshotBase64 = result.screenshotBase64;
+        }
+        if (result.steps) {
+          jobResult.steps = result.steps;
+        }
+        if (result.aiReasoning) {
+          jobResult.aiReasoning = result.aiReasoning;
+        }
+
         await prisma.unsubscribeJob.update({
           where: { id: jobId },
           data: {
             status: JobStatus.NEEDS_CONFIRMATION,
             completedAt: new Date(),
-            result: result as any,
+            result: jobResult,
           },
         });
 
@@ -221,47 +258,53 @@ export class UnsubscribeQueue {
   }
 
   /**
-   * Handle job failure with retry logic
+   * Handle job failure - NO RETRIES
+   * We try once with Playwright + AI, if it fails we mark it for manual review
    */
   private async handleFailure(job: any, result: any) {
-    const shouldRetry = job.attempts < job.maxAttempts;
+    // Store result with screenshots and AI reasoning if available
+    const jobResult: any = {
+      status: result.status,
+      message: result.message,
+    };
 
-    if (shouldRetry) {
-      // Exponential backoff: 2^attempts minutes
-      const delayMinutes = Math.pow(2, job.attempts);
-      const scheduledFor = new Date(Date.now() + delayMinutes * 60 * 1000);
-
-      await prisma.unsubscribeJob.update({
-        where: { id: job.id },
-        data: {
-          status: JobStatus.PENDING,
-          scheduledFor,
-          error: result.error || result.message,
-        },
-      });
-
-      console.log(`[Queue] ↻ Job ${job.id} will retry in ${delayMinutes} minute(s)`);
-    } else {
-      await prisma.unsubscribeJob.update({
-        where: { id: job.id },
-        data: {
-          status: JobStatus.FAILED,
-          completedAt: new Date(),
-          error: result.error || result.message,
-          result: result as any,
-        },
-      });
-
-      console.log(`[Queue] ✗ Job ${job.id} failed after ${job.attempts} attempt(s)`);
-
-      // Notify user of final failure
-      await this.notifyUser(
-        job.userId,
-        job.id,
-        "failed",
-        `Failed to unsubscribe after ${job.attempts} attempts`
-      );
+    if (result.screenshotBase64) {
+      jobResult.screenshotBase64 = result.screenshotBase64;
     }
+    if (result.steps) {
+      jobResult.steps = result.steps;
+    }
+    if (result.aiReasoning) {
+      jobResult.aiReasoning = result.aiReasoning;
+    }
+
+    // No retries - just mark as failed immediately
+    await prisma.unsubscribeJob.update({
+      where: { id: job.id },
+      data: {
+        status: JobStatus.FAILED,
+        completedAt: new Date(),
+        error: result.error || result.message,
+        result: jobResult,
+      },
+    });
+
+    // Set email status to ATTEMPTED (yellow border) even on failure
+    // This shows the user we tried to unsubscribe
+    await prisma.email.update({
+      where: { id: job.emailId },
+      data: { unsubscribeStatus: "ATTEMPTED" },
+    });
+
+    console.log(`[Queue] ✗ Job ${job.id} failed: ${result.error || result.message}`);
+
+    // Notify user of failure
+    await this.notifyUser(
+      job.userId,
+      job.id,
+      "failed",
+      result.message || "Failed to unsubscribe - may require manual action"
+    );
   }
 
   /**

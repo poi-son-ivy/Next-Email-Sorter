@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Pusher from "pusher-js";
 import { Email } from "@/lib/generated/prisma";
 import { EmailCard } from "./email-card";
@@ -18,7 +18,9 @@ export function EmailList({ initialEmails, userId, selectedCategoryId, onNewEmai
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
-  const [processedJobIds, setProcessedJobIds] = useState<Set<string>>(new Set());
+
+  // Use ref instead of state to avoid closure issues with Pusher handlers
+  const processedJobIds = useRef<Set<string>>(new Set());
 
   const handleEmailClick = (email: Email) => {
     setSelectedEmail(email);
@@ -183,12 +185,12 @@ export function EmailList({ initialEmails, userId, selectedCategoryId, onNewEmai
       console.log("[Pusher] Received unsubscribe-update event:", data);
 
       // Deduplicate events - only process each job once
-      if (processedJobIds.has(data.jobId)) {
+      if (processedJobIds.current.has(data.jobId)) {
         console.log("[Pusher] Already processed job", data.jobId, "- ignoring duplicate");
         return;
       }
 
-      setProcessedJobIds(prev => new Set(prev).add(data.jobId));
+      processedJobIds.current.add(data.jobId);
 
       // Show alert based on status
       let message = data.message;

@@ -1,25 +1,29 @@
 /**
  * Unsubscribe executor - handles the actual unsubscribe process
- * Implements Tier 1 (One-Click) and Tier 2 (Simple HTTP GET)
+ * Implements Tier 1 (One-Click), Tier 2 (Simple HTTP GET), and Tier 3 (AI-powered Playwright)
  */
 
 import { prisma } from "@/lib/prisma";
-import { google } from "googleapis";
+// import { google } from "googleapis"; // Unused - kept for future Tier 1 one-click implementation
+import { unsubscribeWithPlaywright } from "./playwright-executor";
 
 export interface UnsubscribeResult {
   status: "success" | "failure" | "needs_confirmation" | "no_url";
-  method?: "one-click" | "simple-http" | "none";
+  method?: "one-click" | "simple-http" | "playwright" | "none";
   message: string;
   url?: string;
   responseStatus?: number;
   responsePreview?: string; // First 500 chars of HTML response for debugging
+  screenshotBase64?: string; // For Playwright results
+  steps?: string[]; // For Playwright results
+  aiReasoning?: string[]; // For Playwright results
   error?: string;
 }
 
 /**
  * Execute unsubscribe for a given email
  */
-export async function unsubscribeEmail(emailId: string, userId: string): Promise<UnsubscribeResult> {
+export async function unsubscribeEmail(emailId: string, _userId: string): Promise<UnsubscribeResult> {
   // Fetch email from database
   const email = await prisma.email.findUnique({
     where: { id: emailId },
@@ -54,100 +58,117 @@ export async function unsubscribeEmail(emailId: string, userId: string): Promise
   }
 
   // Tier 1: Try List-Unsubscribe-Post (One-Click)
-  const oneClickResult = await tryOneClickUnsubscribe(email.gmailId, email.unsubscribeUrl, userId);
-  if (oneClickResult) {
-    return oneClickResult;
-  }
+  // Skip Tier 1 for now - go straight to Playwright to ensure success
+  // const oneClickResult = await tryOneClickUnsubscribe(email.gmailId, email.unsubscribeUrl, userId);
+  // if (oneClickResult && oneClickResult.status === "success") {
+  //   return oneClickResult;
+  // }
 
-  // Tier 2: Try simple HTTP GET
-  const simpleHttpResult = await trySimpleHttpUnsubscribe(email.unsubscribeUrl);
-  return simpleHttpResult;
+  // Tier 2 & 3: Always use Playwright to verify/complete unsubscribe
+  // Simple HTTP GET often returns 200 OK but doesn't actually unsubscribe
+  console.log("[Unsubscribe] Using Tier 3 (Playwright + AI) for reliable verification");
+
+  try {
+    const playwrightResult = await unsubscribeWithPlaywright(email.unsubscribeUrl, email.to[0]);
+    return {
+      ...playwrightResult,
+      status: playwrightResult.status as "success" | "failure" | "needs_confirmation",
+    };
+  } catch (error: any) {
+    console.error("[Unsubscribe] Tier 3 (Playwright) error:", error);
+
+    // If Playwright fails completely, fall back to simple HTTP as last resort
+    console.log("[Unsubscribe] Playwright failed, trying simple HTTP as fallback");
+    const simpleHttpResult = await trySimpleHttpUnsubscribe(email.unsubscribeUrl);
+    return simpleHttpResult;
+  }
 }
 
 /**
  * Tier 1: Try RFC 8058 one-click unsubscribe
- * Checks if the email has List-Unsubscribe-Post header and sends POST request
+ * Currently disabled in favor of Playwright for reliable verification
+ * Kept for future use if needed
  */
-async function tryOneClickUnsubscribe(
-  gmailId: string,
-  unsubscribeUrl: string,
-  userId: string
-): Promise<UnsubscribeResult | null> {
-  try {
-    // Get Gmail API access
-    const account = await prisma.account.findFirst({
-      where: {
-        userId,
-        provider: "google",
-        access_token: { not: null },
-      },
-    });
-
-    if (!account || !account.access_token) {
-      console.log("[Unsubscribe] No Gmail account found, skipping one-click check");
-      return null;
-    }
-
-    // Setup Gmail API
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET
-    );
-
-    oauth2Client.setCredentials({
-      access_token: account.access_token,
-      refresh_token: account.refresh_token,
-    });
-
-    const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-
-    // Fetch email headers
-    const message = await gmail.users.messages.get({
-      userId: "me",
-      id: gmailId,
-      format: "metadata",
-      metadataHeaders: ["List-Unsubscribe-Post", "List-Unsubscribe"],
-    });
-
-    const headers = message.data.payload?.headers || [];
-    const listUnsubscribePost = headers.find((h) => h.name === "List-Unsubscribe-Post")?.value;
-
-    if (!listUnsubscribePost || !listUnsubscribePost.includes("One-Click")) {
-      console.log("[Unsubscribe] No List-Unsubscribe-Post header, skipping one-click");
-      return null;
-    }
-
-    console.log("[Unsubscribe] Found List-Unsubscribe-Post header, attempting one-click");
-
-    // Send POST request with List-Unsubscribe=One-Click
-    const response = await fetch(unsubscribeUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: "List-Unsubscribe=One-Click",
-      redirect: "follow",
-    });
-
-    console.log(`[Unsubscribe] One-click response: ${response.status} ${response.statusText}`);
-
-    if (response.ok) {
-      return {
-        status: "success",
-        method: "one-click",
-        message: "Successfully unsubscribed using one-click method",
-        url: unsubscribeUrl,
-        responseStatus: response.status,
-      };
-    } else {
-      console.log("[Unsubscribe] One-click failed, will try simple HTTP");
-      return null; // Fall back to simple HTTP
-    }
-  } catch (error: any) {
-    console.error("[Unsubscribe] One-click error:", error.message);
-    return null; // Fall back to simple HTTP
-  }
-}
+// async function tryOneClickUnsubscribe(
+//   gmailId: string,
+//   unsubscribeUrl: string,
+//   userId: string
+// ): Promise<UnsubscribeResult | null> {
+//   try {
+//     // Get Gmail API access
+//     const account = await prisma.account.findFirst({
+//       where: {
+//         userId,
+//         provider: "google",
+//         access_token: { not: null },
+//       },
+//     });
+//
+//     if (!account || !account.access_token) {
+//       console.log("[Unsubscribe] No Gmail account found, skipping one-click check");
+//       return null;
+//     }
+//
+//     // Setup Gmail API
+//     const oauth2Client = new google.auth.OAuth2(
+//       process.env.GOOGLE_CLIENT_ID,
+//       process.env.GOOGLE_CLIENT_SECRET
+//     );
+//
+//     oauth2Client.setCredentials({
+//       access_token: account.access_token,
+//       refresh_token: account.refresh_token,
+//     });
+//
+//     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+//
+//     // Fetch email headers
+//     const message = await gmail.users.messages.get({
+//       userId: "me",
+//       id: gmailId,
+//       format: "metadata",
+//       metadataHeaders: ["List-Unsubscribe-Post", "List-Unsubscribe"],
+//     });
+//
+//     const headers = message.data.payload?.headers || [];
+//     const listUnsubscribePost = headers.find((h) => h.name === "List-Unsubscribe-Post")?.value;
+//
+//     if (!listUnsubscribePost || !listUnsubscribePost.includes("One-Click")) {
+//       console.log("[Unsubscribe] No List-Unsubscribe-Post header, skipping one-click");
+//       return null;
+//     }
+//
+//     console.log("[Unsubscribe] Found List-Unsubscribe-Post header, attempting one-click");
+//
+//     // Send POST request with List-Unsubscribe=One-Click
+//     const response = await fetch(unsubscribeUrl, {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/x-www-form-urlencoded",
+//       },
+//       body: "List-Unsubscribe=One-Click",
+//       redirect: "follow",
+//     });
+//
+//     console.log(`[Unsubscribe] One-click response: ${response.status} ${response.statusText}`);
+//
+//     if (response.ok) {
+//       return {
+//         status: "success",
+//         method: "one-click",
+//         message: "Successfully unsubscribed using one-click method",
+//         url: unsubscribeUrl,
+//         responseStatus: response.status,
+//       };
+//     } else {
+//       console.log("[Unsubscribe] One-click failed, will try simple HTTP");
+//       return null; // Fall back to simple HTTP
+//     }
+//   } catch (error: any) {
+//     console.error("[Unsubscribe] One-click error:", error.message);
+//     return null; // Fall back to simple HTTP
+//   }
+// }
 
 /**
  * Tier 2: Try simple HTTP GET request

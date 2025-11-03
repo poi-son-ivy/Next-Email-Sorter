@@ -91,8 +91,8 @@ The system will automatically skip Anthropic and use OpenAI directly.
 
 ### Models Used
 
-- **Anthropic**: `claude-3-5-sonnet-20241022` (can be customized)
-- **OpenAI**: `gpt-4o-mini` (can be customized)
+- **Anthropic**: `claude-sonnet-4-5-20250929` (can be customized via `ANTHROPIC_MODEL` env var)
+- **OpenAI**: `gpt-4o-mini` (can be customized via `OPENAI_MODEL` env var)
 
 ### Logging
 
@@ -174,11 +174,16 @@ Both providers are very cost-effective for this use case!
 
 ## Advanced Configuration
 
-If you need to customize the AI models or parameters, you can modify `/lib/ai.ts`:
+You can customize AI models using environment variables in your `.env` file:
+
+```bash
+ANTHROPIC_MODEL=claude-sonnet-4-5-20250929
+OPENAI_MODEL=gpt-4o-mini
+```
+
+If you need to customize other parameters (temperature, max tokens), you can modify `/lib/ai.ts`:
 
 ```typescript
-const anthropicModel = "claude-3-5-sonnet-20241022";
-const openaiModel = "gpt-4o-mini";
 const temperature = 0.3; // Lower = more consistent
 const maxTokens = 50; // Enough for category name
 ```
