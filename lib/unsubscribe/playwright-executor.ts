@@ -5,7 +5,7 @@
 
 import puppeteer, { Browser, Page } from "puppeteer-core";
 import { analyzePageText, analyzeScreenshot, PageAnalysis } from "./ai-analyzer";
-import chromium from "@sparticuz/chromium";
+import chromium from "@sparticuz/chromium-min";
 
 export interface PlaywrightResult {
   status: "success" | "needs_manual" | "failure";
@@ -42,6 +42,12 @@ export async function unsubscribeWithPlaywright(
     // In production (Vercel) or AWS Lambda, use @sparticuz/chromium
     if (isProduction) {
       console.log('[Puppeteer] Using @sparticuz/chromium for serverless environment');
+
+      // Set font path for chromium
+      await chromium.font(
+        'https://raw.githack.com/googlei18n/noto-emoji/master/fonts/NotoColorEmoji.ttf'
+      );
+
       browser = await puppeteer.launch({
         args: chromium.args,
         executablePath: await chromium.executablePath(),
