@@ -28,6 +28,7 @@
     "@sparticuz/chromium-min": "^141.0.0",
     "dotenv": "^17.2.3",
     "googleapis": "^164.1.0",
+    "inngest": "^3.44.4",
     "next": "^16.0.1",
     "next-auth": "^5.0.0-beta.30",
     "openai": "^6.7.0",

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { unsubscribeQueue } from "@/lib/queue/unsubscribe-queue";
+import { inngest } from "@/lib/inngest/client";
+import { prisma } from "@/lib/prisma";
+import { JobStatus } from "@/lib/generated/prisma";
 
 /**
  * Enqueue unsubscribe jobs for multiple emails
+ * Uses Inngest for reliable background processing with no timeout limits
  */
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -25,12 +28,36 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Queue API] Enqueueing ${emailIds.length} unsubscribe job(s) for user ${session.user.id}`);
 
-    // Enqueue all jobs
+    // Create jobs in database
     const jobs = await Promise.all(
       emailIds.map((emailId) =>
-        unsubscribeQueue.enqueue(emailId, session.user.id!)
+        prisma.unsubscribeJob.create({
+          data: {
+            emailId,
+            userId: session.user.id!,
+            priority: 0,
+            status: JobStatus.PENDING,
+            scheduledFor: new Date(),
+          },
+        })
       )
     );
+
+    // Send events to Inngest for background processing
+    await Promise.all(
+      jobs.map((job) =>
+        inngest.send({
+          name: "email/unsubscribe.requested",
+          data: {
+            emailId: job.emailId,
+            userId: session.user.id!,
+            jobId: job.id,
+          },
+        })
+      )
+    );
+
+    console.log(`[Queue API] Sent ${jobs.length} event(s) to Inngest`);
 
     return NextResponse.json({
       success: true,

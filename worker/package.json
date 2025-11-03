@@ -1,0 +1,19 @@
+{
+  "name": "email-sorter-worker",
+  "version": "1.0.0",
+  "description": "Background worker for processing unsubscribe jobs with Puppeteer",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "puppeteer": "^23.10.4",
+    "@prisma/client": "^6.18.0",
+    "dotenv": "^17.2.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

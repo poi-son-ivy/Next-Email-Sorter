@@ -1,0 +1,17 @@
+services:
+  # Background worker for processing unsubscribe jobs with Puppeteer
+  - type: web
+    name: email-sorter-worker
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: cd worker && npm install && npx prisma generate
+    startCommand: cd worker && npm start
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: WORKER_API_KEY
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /health
