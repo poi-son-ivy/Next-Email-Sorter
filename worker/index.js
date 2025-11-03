@@ -65,10 +65,12 @@ async function processUnsubscribeJob(jobId) {
       encoding: 'base64'
     });
 
+    // Get page content before closing browser
+    const pageContent = await page.content();
+
     await browser.close();
 
     // Simple success check (you can enhance with AI later)
-    const pageContent = await page.content();
     const isSuccess =
       /unsubscribed|success|confirmed|removed/i.test(pageContent);
 

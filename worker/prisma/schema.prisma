@@ -3,14 +3,12 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../lib/generated/prisma"
-  binaryTargets = ["native"]
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // NextAuth.js models
