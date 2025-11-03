@@ -79,15 +79,8 @@ Examples:
       throw new Error("Unexpected response type");
     }
 
-    // Clean the response - remove markdown code blocks if present
-    let jsonText = content.text.trim();
-
-    // Remove ```json and ``` if present
-    if (jsonText.startsWith("```json")) {
-      jsonText = jsonText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-    } else if (jsonText.startsWith("```")) {
-      jsonText = jsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
-    }
+    // Clean the response - extract JSON from various formats
+    const jsonText = extractJSON(content.text);
 
     const analysis: PageAnalysis = JSON.parse(jsonText);
     console.log(`[AI Text] ${url} → ${analysis.action} (${analysis.confidence})`);
@@ -102,6 +95,70 @@ Examples:
       confidence: 0,
     };
   }
+}
+
+/**
+ * Extract JSON from AI response text
+ * Handles code blocks, extra commentary, and various formats
+ */
+function extractJSON(text: string): string {
+  let cleaned = text.trim();
+
+  // Try 1: Remove markdown code blocks
+  if (cleaned.startsWith("```json")) {
+    cleaned = cleaned.replace(/^```json\s*/, "").replace(/\s*```[\s\S]*$/, "");
+  } else if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```\s*/, "").replace(/\s*```[\s\S]*$/, "");
+  }
+
+  // Try 2: Find JSON object boundaries
+  // Look for the first { and find its matching }
+  const firstBrace = cleaned.indexOf("{");
+  if (firstBrace === -1) {
+    throw new Error("No JSON object found in response");
+  }
+
+  let braceCount = 0;
+  let inString = false;
+  let escapeNext = false;
+  let lastBrace = -1;
+
+  for (let i = firstBrace; i < cleaned.length; i++) {
+    const char = cleaned[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString) {
+      if (char === "{") {
+        braceCount++;
+      } else if (char === "}") {
+        braceCount--;
+        if (braceCount === 0) {
+          lastBrace = i;
+          break;
+        }
+      }
+    }
+  }
+
+  if (lastBrace === -1) {
+    throw new Error("Could not find matching closing brace for JSON object");
+  }
+
+  return cleaned.substring(firstBrace, lastBrace + 1);
 }
 
 /**
@@ -161,15 +218,8 @@ Respond in JSON format:
       throw new Error("Unexpected response type");
     }
 
-    // Clean the response - remove markdown code blocks if present
-    let jsonText = content.text.trim();
-
-    // Remove ```json and ``` if present
-    if (jsonText.startsWith("```json")) {
-      jsonText = jsonText.replace(/^```json\s*/, "").replace(/\s*```$/, "");
-    } else if (jsonText.startsWith("```")) {
-      jsonText = jsonText.replace(/^```\s*/, "").replace(/\s*```$/, "");
-    }
+    // Clean the response - extract JSON from various formats
+    const jsonText = extractJSON(content.text);
 
     const verification: VisualVerification = JSON.parse(jsonText);
     console.log(`[AI Vision] ${url} → ${verification.isSuccess ? "Success" : "Not complete"} (${verification.confidence})`);
