@@ -18,6 +18,7 @@ export function EmailList({ initialEmails, userId, selectedCategoryId, onNewEmai
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEmailIds, setSelectedEmailIds] = useState<Set<string>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [processedJobIds, setProcessedJobIds] = useState<Set<string>>(new Set());
 
   const handleEmailClick = (email: Email) => {
     setSelectedEmail(email);
@@ -49,16 +50,44 @@ export function EmailList({ initialEmails, userId, selectedCategoryId, onNewEmai
     }
   };
 
-  const handleUnsubscribeSelected = () => {
+  const handleUnsubscribeSelected = async () => {
     if (selectedEmailIds.size === 0) return;
 
-    // Show unsubscribe URLs for each selected email
-    const selectedEmails = initialEmails.filter((email) => selectedEmailIds.has(email.id));
+    const count = selectedEmailIds.size;
+    if (!confirm(`Start unsubscribe process for ${count} email(s)?`)) {
+      return;
+    }
 
-    selectedEmails.forEach((email) => {
-      const url = email.unsubscribeUrl || "none found";
-      alert(`Email: ${email.subject}\nFrom: ${email.from}\n\nUnsubscribe URL: ${url}`);
-    });
+    setIsDeleting(true); // Reuse this loading state
+    try {
+      const response = await fetch("/api/queue/enqueue", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          emailIds: Array.from(selectedEmailIds),
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to enqueue unsubscribe jobs");
+      }
+
+      const result = await response.json();
+
+      // Clear selection
+      setSelectedEmailIds(new Set());
+
+      // Show success message
+      alert(`Successfully queued ${result.jobs.length} unsubscribe job(s). You'll be notified when complete.`);
+    } catch (error: any) {
+      console.error("Error enqueueing unsubscribe jobs:", error);
+      alert(error.message || "Failed to start unsubscribe process");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const handleDeleteSelected = async () => {
@@ -147,6 +176,35 @@ export function EmailList({ initialEmails, userId, selectedCategoryId, onNewEmai
           icon: "/favicon.ico",
         });
       }
+    });
+
+    // Listen for unsubscribe updates
+    channel.bind("unsubscribe-update", (data: { jobId: string; status: string; message: string }) => {
+      console.log("[Pusher] Received unsubscribe-update event:", data);
+
+      // Deduplicate events - only process each job once
+      if (processedJobIds.has(data.jobId)) {
+        console.log("[Pusher] Already processed job", data.jobId, "- ignoring duplicate");
+        return;
+      }
+
+      setProcessedJobIds(prev => new Set(prev).add(data.jobId));
+
+      // Show alert based on status
+      let message = data.message;
+
+      if (data.status === "success") {
+        message = `✓ ${data.message}\n\nTip: Refresh the page to see the yellow border. Check in a few days to verify you stopped receiving emails.`;
+      } else if (data.status === "needs_confirmation") {
+        message = `⚠ ${data.message}\n\nPlease check the unsubscribe link manually.`;
+      } else if (data.status === "failed") {
+        message = `✗ ${data.message}`;
+      }
+
+      alert(message);
+
+      // Log to console for debugging
+      console.log(`[Unsubscribe] ${data.status}: ${data.message}`);
     });
 
     // Cleanup on unmount

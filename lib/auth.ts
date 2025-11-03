@@ -53,7 +53,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
       }
       // Add user id to token
-      if (user) {
+      if (user?.id) {
         token.id = user.id;
 
         // Ensure default "General" category exists for new users

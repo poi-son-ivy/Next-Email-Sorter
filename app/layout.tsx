@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import "@/lib/queue-init"; // Auto-start unsubscribe queue
 
 export const metadata: Metadata = {
   title: "Email Sorter",

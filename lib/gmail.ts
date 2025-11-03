@@ -1,3 +1,4 @@
+
 import { google } from "googleapis";
 import { prisma } from "./prisma";
 import { pusher } from "./pusher";
@@ -158,14 +159,20 @@ export async function storeEmails(
     // If no header link found, try parsing the email body
     if (!unsubscribeUrl) {
       const emailBody = extractEmailBody(message);
+      console.log(`[Unsubscribe] Extracted email body for "${subject}": ${emailBody ? `${emailBody.length} chars` : 'empty'}`);
+
       if (emailBody) {
         unsubscribeUrl = findUnsubscribeLinkInBody(emailBody);
         if (unsubscribeUrl) {
-          console.log(`[Unsubscribe] Found link in body for "${subject}": ${unsubscribeUrl}`);
+          console.log(`[Unsubscribe] ✓ Found link in body for "${subject}": ${unsubscribeUrl}`);
+        } else {
+          console.log(`[Unsubscribe] ✗ No link found in body for "${subject}"`);
         }
+      } else {
+        console.log(`[Unsubscribe] ✗ Failed to extract body for "${subject}"`);
       }
     } else {
-      console.log(`[Unsubscribe] Found link in header for "${subject}": ${unsubscribeUrl}`);
+      console.log(`[Unsubscribe] ✓ Found link in header for "${subject}": ${unsubscribeUrl}`);
     }
 
     // Check if email already exists

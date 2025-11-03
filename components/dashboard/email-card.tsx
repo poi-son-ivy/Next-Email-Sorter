@@ -14,6 +14,23 @@ export function EmailCard({ email, onClick, isSelected, onToggleSelect }: EmailC
     e.stopPropagation(); // Prevent opening modal
     onToggleSelect?.();
   };
+
+  // Determine border color based on unsubscribe status
+  // Using inline style instead of Tailwind classes to avoid purging issues
+  const getBorderStyle = (): React.CSSProperties => {
+    if (!email.unsubscribeStatus) return {};
+
+    switch (email.unsubscribeStatus) {
+      case "ATTEMPTED":
+        return { borderLeft: '4px solid #EAB308' }; // yellow-500
+      case "SUCCEEDED":
+        return { borderLeft: '4px solid #22C55E' }; // green-500
+      case "FAILED":
+        return { borderLeft: '4px solid #EF4444' }; // red-500
+      default:
+        return {};
+    }
+  };
   const formatDate = (date: Date) => {
     const now = new Date();
     const diff = now.getTime() - new Date(date).getTime();
@@ -48,6 +65,7 @@ export function EmailCard({ email, onClick, isSelected, onToggleSelect }: EmailC
       className={`group bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition-colors ${
         isSelected ? "bg-blue-50 dark:bg-blue-900/20" : ""
       }`}
+      style={getBorderStyle()}
     >
       <div className="flex items-start gap-3">
         {/* Checkbox */}

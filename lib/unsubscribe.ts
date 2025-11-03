@@ -16,6 +16,7 @@ export function findUnsubscribeLinkInBody(htmlBody: string): string | null {
   }
 
   console.log(`[Unsubscribe Debug] Parsing email body (${htmlBody.length} chars)`);
+  console.log(`[Unsubscribe Debug] Body sample: ${htmlBody.substring(0, 200)}...`);
 
   // Pattern 1: Find all <a> tags with href attributes (more flexible regex)
   // This handles: <a href="...">, <a class="..." href="...">, etc.

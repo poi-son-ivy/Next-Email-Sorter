@@ -13,6 +13,7 @@ export function EmailViewerModal({ email, isOpen, onClose }: EmailViewerModalPro
   const [fullEmailHtml, setFullEmailHtml] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [deletedFromGmail, setDeletedFromGmail] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   useEffect(() => {
     if (isOpen && email) {
@@ -70,6 +71,34 @@ export function EmailViewerModal({ email, isOpen, onClose }: EmailViewerModalPro
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
       onClose();
+    }
+  };
+
+  const handleUpdateUnsubscribeStatus = async (status: "SUCCEEDED" | "FAILED") => {
+    if (!email) return;
+
+    setIsUpdatingStatus(true);
+    try {
+      const response = await fetch(`/api/emails/${email.id}/unsubscribe-status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update status");
+      }
+
+      // Refresh the page to show updated border
+      window.location.reload();
+    } catch (error: any) {
+      console.error("Error updating unsubscribe status:", error);
+      alert(error.message || "Failed to update unsubscribe status");
+    } finally {
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -193,7 +222,7 @@ export function EmailViewerModal({ email, isOpen, onClose }: EmailViewerModalPro
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 rounded-b-xl">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               {email.labelIds.map((label) => (
                 <span
@@ -204,12 +233,51 @@ export function EmailViewerModal({ email, isOpen, onClose }: EmailViewerModalPro
                 </span>
               ))}
             </div>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
-            >
-              Close
-            </button>
+
+            <div className="flex items-center gap-2">
+              {/* Show unsubscribe status feedback buttons for any status */}
+              {email.unsubscribeStatus && (
+                <>
+                  <button
+                    onClick={() => handleUpdateUnsubscribeStatus("SUCCEEDED")}
+                    disabled={isUpdatingStatus || email.unsubscribeStatus === "SUCCEEDED"}
+                    className={`px-3 py-1.5 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 ${
+                      email.unsubscribeStatus === "SUCCEEDED"
+                        ? "bg-green-700 cursor-not-allowed"
+                        : "bg-green-600 hover:bg-green-700"
+                    }`}
+                    title={email.unsubscribeStatus === "SUCCEEDED" ? "Already marked as successful" : "Mark unsubscribe as successful"}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Worked</span>
+                  </button>
+                  <button
+                    onClick={() => handleUpdateUnsubscribeStatus("FAILED")}
+                    disabled={isUpdatingStatus || email.unsubscribeStatus === "FAILED"}
+                    className={`px-3 py-1.5 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1.5 ${
+                      email.unsubscribeStatus === "FAILED"
+                        ? "bg-red-700 cursor-not-allowed"
+                        : "bg-red-600 hover:bg-red-700"
+                    }`}
+                    title={email.unsubscribeStatus === "FAILED" ? "Already marked as failed" : "Mark unsubscribe as failed"}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    <span>Failed</span>
+                  </button>
+                </>
+              )}
+
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       </div>
