@@ -44,9 +44,7 @@ describe('AccountCard', () => {
     global.fetch = jest.fn();
     global.alert = jest.fn();
     global.confirm = jest.fn();
-    // Mock window.location.reload
-    delete (window as any).location;
-    (window as any).location = { reload: jest.fn() };
+    // window.location mock is set up globally in jest.setup.js
   });
 
   it('renders account information correctly', () => {
@@ -221,7 +219,7 @@ describe('AccountCard', () => {
   it('renders avatar image when picture is provided', () => {
     render(<AccountCard account={mockAccount} {...defaultProps} />);
 
-    const image = screen.getByAlt('Test User');
+    const image = screen.getByAltText('Test User');
     expect(image).toBeInTheDocument();
     expect(image).toHaveAttribute('src', 'https://example.com/avatar.jpg');
   });
@@ -233,7 +231,8 @@ describe('AccountCard', () => {
       name: 'Test User',
     };
 
-    render(<AccountCard account={accountWithoutPicture} {...defaultProps} />);
+    // Override userImage to null to test initial avatar rendering
+    render(<AccountCard account={accountWithoutPicture} {...defaultProps} userImage={null} />);
 
     expect(screen.getByText('T')).toBeInTheDocument(); // First letter of name
   });
